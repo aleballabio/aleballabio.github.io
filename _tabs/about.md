@@ -4,6 +4,8 @@ icon: fas fa-info-circle
 order: 4
 ---
 
+# Hi, I'm Alessandro 👋
+
 CS student at OPIT (Year 2)
 Aspiring penetration tester — generalist track, working toward OSCP.
 Currently studying for the eJPT certification. Based in Naples, Italy.
