@@ -27,5 +27,3 @@ Currently studying for the eJPT certification. Based in Naples, Italy.
 - Burp Suite
 - Nmap
 - SQL
-
-## Find my write-ups in the posts below
