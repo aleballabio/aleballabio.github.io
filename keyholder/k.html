@@ -391,7 +391,7 @@ async function viewRequest(r) {
     const iphone = isIOS && !standalone;
     $app.innerHTML = `<div class="rise" style="display:grid;gap:18px">
       <div class="eyebrow">${BRASS_KEY(34, { bit: false })} Keyholder</div>
-      <h1>${esc(r.f || "Someone")} is asking for the key.</h1>
+      <h1>${esc(r.f || "Someone")} ${r.t === "handover" ? "wants a new keyholder." : "is asking for the key."}</h1>
       <div class="card accent">${icon}<h2>${d.title}</h2>${r.n ? `<p>“${esc(r.n)}”</p>` : ""}</div>
       ${iphone ? `
         <p>Your key lives in the Keyholder app on your Home Screen.</p>
@@ -413,7 +413,7 @@ async function viewRequest(r) {
   }
   $app.innerHTML = `<div class="rise" style="display:grid;gap:18px">
     <div class="eyebrow">${BRASS_KEY(34, { bit: false })} You hold the key</div>
-    <h1>${esc(r.f || "Someone")} is asking for the key.</h1>
+    <h1>${esc(r.f || "Someone")} ${r.t === "handover" ? "wants a new keyholder." : "is asking for the key."}</h1>
     <div class="card accent">${icon}<h2>${d.title}</h2>${r.n ? `<p>“${esc(r.n)}”</p>` : ""}<p class="small">${d.sub}</p></div>
     <p class="small">Your approval works for this request only.</p>
     <button class="hold" id="ok" data-label="Hold to hand over the key"><span class="fill"></span>
