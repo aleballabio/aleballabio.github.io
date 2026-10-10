@@ -233,7 +233,9 @@ function parseFrag(f) {
   try {
     if (parts[0] === "r1" && parts.length === 2) {
       const r = JSON.parse(dec.decode(unb64u(parts[1])));
-      if (!/^[0-9a-f]{16}$/.test(r.id) || !["window", "bonus", "detox"].includes(r.t) || !(r.m >= 1 && r.m <= 240)) return { kind: "bad" };
+      if (!/^[0-9a-f]{16}$/.test(r.id) || !["window", "bonus", "detox", "handover"].includes(r.t) || !(r.m >= 1 && r.m <= 240)) return { kind: "bad" };
+      // A handover carries the new keyholder's public key.
+      if (r.t === "handover" && !/^[A-Za-z0-9_-]{100,170}$/.test(r.a || "")) return { kind: "bad" };
       return { kind: "request", r };
     }
     if (parts[0] === "p1" || parts[0] === "a1") return { kind: "app", frag: f, what: parts[0] };
@@ -276,7 +278,7 @@ function holdButton(el, onDone, holdMs = 900) {
   };
   const down = (e) => {
     if (done || e.button > 0) return;
-    e.preventDefault(); el.setPointerCapture && el.setPointerCapture(e.pointerId);
+    e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) {}
     el.classList.add("holding"); ticks = 0; start = performance.now(); raf = requestAnimationFrame(frame);
     el.querySelector(".text").textContent = "Keep holding…";
   };
@@ -327,7 +329,7 @@ function viewInstall() {
       ${DIAL()}
       <div class="eyebrow">Keyholder · iPhone</div>
       <h1>Put Keyholder on your Home Screen.</h1>
-      <p>Your key lives in the Keyholder icon on your Home Screen. There, Safari can't clear it, and it opens full screen like an app.</p>
+      <p>Keep your key in a Home Screen app. Safari can't clear it there.</p>
       <div class="card"><ol class="steps">
         <li>Tap the Share button <span class="mono">⬆︎</span> at the bottom of Safari.</li>
         <li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li>
@@ -349,14 +351,14 @@ async function viewHome() {
       <div class="eyebrow">${BRASS_KEY(34, { bit: false })} You hold the key</div>
       <h1>Holding the key.</h1>
       <button class="primary" id="paste">Paste a request</button>
-      <p class="small" style="margin-top:-8px">Got a request in a chat? Copy it, then tap Paste. Or just tap the link.</p>
+      <p class="small" style="margin-top:-8px">Copy a request link from your chat, then tap Paste. Or tap the link.</p>
       <label>Your name, as they'll see it<input id="name" value="${esc(name)}" maxlength="40" placeholder="Marco" autocomplete="given-name"></label>
-      <div class="card"><p>Together: they point their phone's camera at this code.</p><div class="qr" id="qr"></div>
-        <div style="display:flex;gap:10px;align-items:center"><span class="chip">${fp}</span><p class="small">Your key's fingerprint. Their phone shows it too, so you can check it matches.</p></div></div>
-      <button class="secondary" id="send">Far apart: send my key</button>
+      <div class="card"><p>Have them scan this code with their camera.</p><div class="qr" id="qr"></div>
+        <div style="display:flex;gap:10px;align-items:center"><span class="chip">${fp}</span><p class="small">Your key's fingerprint. It should match the one on their phone.</p></div></div>
+      <button class="secondary" id="send">Send key link</button>
       <div class="card"><div class="eyebrow">How approving works</div>
-        <ol class="steps"><li>They send you a request link through any messenger.</li><li>${isIOS && standalone ? "Copy it and tap Paste a request here." : "Tap it. This page opens with Approve or Not now."}</li><li>Hold to hand over the key, then send the reply back. It works once and expires in 15 minutes.</li></ol></div>
-      <p class="small">${isIOS && standalone ? "Your key stays in this Home Screen app. Deleting the app deletes the key; you'd then pair again." : "Use this page in one browser only, and don't clear its site data, or the key is lost. You'd then pair again."}</p>
+        <ol class="steps"><li>They send you a request link.</li><li>${isIOS && standalone ? "Copy it, then tap Paste a request here." : "Tap it to open it here."}</li><li>Hold to approve, then send the reply. It works once, within 15 minutes.</li></ol></div>
+      <p class="small">${isIOS && standalone ? "Your key stays in this Home Screen app. Deleting the app deletes the key, and you'd need to pair again." : "Use this page in one browser only. Clearing its site data deletes the key, and you'd need to pair again."}</p>
       <button class="ghost" id="reset" style="color:var(--dim)">Delete my key</button>
     </div>`;
   const draw = () => { $("qr").innerHTML = qrSvg(link()); };
@@ -370,15 +372,20 @@ async function viewHome() {
   };
 }
 
-function describe(r) {
+function describe(r, fp) {
   if (r.t === "window") return { title: `${r.m}-minute window`, sub: `For ${r.m} minutes they can change any limit and use any app.` };
   if (r.t === "bonus") return { title: `+${r.m} minutes of ${esc(r.al || "one app")}`, sub: "Only that app, only this once." };
+  if (r.t === "handover") {
+    const who = esc(r.al || "the new keyholder");
+    return { title: `Give their key to ${esc(r.al || "someone else")}`,
+      sub: `You stop holding their key. Only ${who} can approve after this.</p><p class="small"><span class="chip">${fp}</span> New key. Check it with ${who}.` };
+  }
   return { title: "End their break early", sub: "Their detox or break ends now." };
 }
 
 async function viewRequest(r) {
   const kp = await loadKey();
-  const d = describe(r);
+  const d = describe(r, r.t === "handover" ? await fingerprint(unb64u(r.a)) : "");
   const icon = r.t === "bonus" ? appIcon(r) : "";
   if (!kp) {
     const iphone = isIOS && !standalone;
@@ -390,11 +397,11 @@ async function viewRequest(r) {
         <p>Your key lives in the Keyholder app on your Home Screen.</p>
         <button class="primary" id="copy">Copy request</button>
         <div class="card"><ol class="steps"><li>Tap Copy request above.</li><li>Open Keyholder from your Home Screen.</li><li>Tap Paste a request, then hold to hand over the key.</li></ol></div>
-        <button class="ghost" id="setup" style="color:var(--dim)">No Home Screen app yet? Set it up</button>`
+        <button class="ghost" id="setup" style="color:var(--dim)">No Home Screen app yet? Set up</button>`
       : `
-        <p>This browser doesn't hold a key yet. If you use the Keyholder app, open this link on that phone instead. Otherwise set up this page as their keyholder first. They'll need to pair with it.</p>
-        ${isAndroid ? `<button class="primary" id="app">Open in the Keyholder app</button>` : ""}
-        <button class="secondary" id="setup">Set up this browser</button>`}
+        <p>This browser has no key yet. Using the Keyholder app? Open this link on that phone. Otherwise, set up this browser and pair with them first.</p>
+        ${isAndroid ? `<button class="primary" id="app">Open in app</button>` : ""}
+        <button class="secondary" id="setup">Set up browser</button>`}
       </div>`;
     if ($("copy")) $("copy").onclick = async () => {
       try { await navigator.clipboard.writeText(location.href); toast("Copied. Now open Keyholder from your Home Screen."); }
@@ -408,7 +415,7 @@ async function viewRequest(r) {
     <div class="eyebrow">${BRASS_KEY(34, { bit: false })} You hold the key</div>
     <h1>${esc(r.f || "Someone")} is asking for the key.</h1>
     <div class="card accent">${icon}<h2>${d.title}</h2>${r.n ? `<p>“${esc(r.n)}”</p>` : ""}<p class="small">${d.sub}</p></div>
-    <p class="small">Approving signs this one request with the key on this device. It can't be reused.</p>
+    <p class="small">Your approval works for this request only.</p>
     <button class="hold" id="ok" data-label="Hold to hand over the key"><span class="fill"></span>
       <span class="label">${BRASS_KEY(30, { bit: false })}<span class="text">Hold to hand over the key</span></span></button>
     <div class="row"><button class="secondary" id="no">Not now</button>${r.t !== "detox" && r.m > 15 ? `<button class="secondary" id="short">Only 15 min</button>` : ""}</div></div>`;
@@ -422,7 +429,7 @@ async function viewRequest(r) {
   const s = $("short"); if (s) s.onclick = () => approve(15);
   $("no").onclick = () => {
     $app.innerHTML = `<div class="rise" style="display:grid;gap:14px;text-align:center;padding-top:24vh">
-      <div style="font-size:0">${BRASS_KEY(90, { bit: true })}</div><h1>Key kept.</h1><p>Nothing is sent. Their limits stay as they are.</p></div>`;
+      <div style="font-size:0">${BRASS_KEY(90, { bit: true })}</div><h1>Key kept.</h1><p>Nothing was sent. Their limits stay the same.</p></div>`;
   };
 }
 
@@ -432,14 +439,14 @@ function viewApproved(link, r, minutes) {
       <span class="badge"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#120e06" stroke-width="2.6" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></span>
       <span class="flying">${BRASS_KEY(110)}</span></div>
     <div class="rise" style="display:grid;gap:18px">
-      <h1 style="text-align:center">Key ready to send.</h1>
-      <p style="text-align:center">Send the reply to ${esc(r.f || "them")}. Once they tap it, it works for ${minutes} minutes.</p>
-      <button class="primary" id="send">Send the reply</button>
-      <button class="secondary" id="together">We're together: show a code</button>
+      <h1 style="text-align:center">Approved.</h1>
+      <p style="text-align:center">Send it to ${esc(r.f || "them")}. It works once and must be opened within 15 minutes.</p>
+      <button class="primary" id="send">Send reply</button>
+      <button class="secondary" id="together">Show code</button>
       <div class="qr" id="qr" hidden></div>
       <button class="ghost" id="home" style="color:var(--dim)">Done</button></div></div>`;
   sparks($("sp"));
-  $("send").onclick = () => shareOrCopy(`Here's the key:\n${link}`, "Keyholder reply");
+  $("send").onclick = () => shareOrCopy(`Approved. Tap to open:\n${link}`, "Keyholder reply");
   $("together").onclick = () => { const q = $("qr"); q.innerHTML = qrSvg(link); q.hidden = !q.hidden; };
   $("home").onclick = () => { history.replaceState(null, "", location.pathname); viewHome(); };
 }
