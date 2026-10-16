@@ -16,7 +16,7 @@ timezone: Europe/Rome
 
 title: Alessandro Ballabio # the main title
 
-tagline: Jr. Penetration Tester # it will display as the subtitle
+tagline: Cybersecurity & Penetration Testing # it will display as the subtitle
 
 description: >- # used by seo meta and the atom feed
   CTF writeups, pentest notes, and the road to OSCP.
